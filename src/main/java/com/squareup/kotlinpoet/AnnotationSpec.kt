@@ -36,18 +36,23 @@ class AnnotationSpec private constructor(builder: AnnotationSpec.Builder) {
 
   @Throws(IOException::class)
   internal fun emit(codeWriter: CodeWriter, inline: Boolean, asParameter: Boolean = false) {
-    val typeFormat = if (asParameter) "%T" else "@%T"
+    if (!asParameter) {
+      codeWriter.emit("@")
+    }
+    codeWriter.emitCode("%T", type)
+
+    if (members.isEmpty() && !asParameter) {
+      // @Singleton
+      return
+    }
+
     val whitespace = if (inline) "" else "\n"
     val memberSeparator = if (inline) ", " else ",\n"
-    if (members.isEmpty()) {
-      // @Singleton
-      val format = if (asParameter) "$typeFormat()" else typeFormat
-      codeWriter.emitCode(format, type)
-    } else if (members.size == 1 && members.containsKey("value")) {
+
+    codeWriter.emit("(")
+    if (members.size == 1 && members.containsKey("value")) {
       // @Named("foo")
-      codeWriter.emitCode("$typeFormat(", type)
       emitAnnotationValues(codeWriter, whitespace, memberSeparator, members["value"]!!)
-      codeWriter.emit(")")
     } else {
       // Inline:
       //   @Column(name = "updated_at", nullable = false)
@@ -57,18 +62,15 @@ class AnnotationSpec private constructor(builder: AnnotationSpec.Builder) {
       //       name = "updated_at",
       //       nullable = false
       //   )
-      codeWriter.emitCode("$typeFormat(" + whitespace, type)
-      codeWriter.indent(2)
-      val i = members.entries.iterator()
-      while (i.hasNext()) {
-        val entry = i.next()
+      codeWriter.emit(whitespace).indent(2)
+      members.entries.forEachIndexed { index, entry ->
+        if (index > 0) codeWriter.emit(memberSeparator)
         codeWriter.emitCode("%L = ", entry.key)
         emitAnnotationValues(codeWriter, whitespace, memberSeparator, entry.value)
-        if (i.hasNext()) codeWriter.emit(memberSeparator)
       }
-      codeWriter.unindent(2)
-      codeWriter.emit(whitespace + ")")
+      codeWriter.unindent(2).emit(whitespace)
     }
+    codeWriter.emit(")")
   }
 
   @Throws(IOException::class)
